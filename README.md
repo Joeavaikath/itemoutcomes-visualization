@@ -2,7 +2,7 @@
 
 An animated, dependency-free visualization of Velero's per-item backup outcomes artifact.
 
-The page includes five server-side scenarios:
+The page includes thirteen server-side scenarios:
 
 | Scenario | What it shows |
 |---|---|
@@ -11,6 +11,14 @@ The page includes five server-side scenarios:
 | Prehook failure | a Pod row recorded before `Observe`, then raised to Failed |
 | Async BIA failure | an operation that settles after the first write and fails the item at finalize |
 | Finalize overlays | `Merge`, `ApplyOperations`, and `ApplyVolumes` over one stored artifact |
+| Volume failure | a captured disk fails and the owning PVC row becomes Failed |
+| Pending operation | an operation is still pending at finalize, so the artifact stays provisional |
+| Posthook failure | a Pod is backed up, then its posthook fails after the archive write |
+| Item skip after volume skip | an item-level skip clears the marker, so a captured disk cannot rescue it |
+| Rename and rekey | a parent is renamed and the child edge follows the final identity |
+| Multiple attempts and cap | ten attempts merge, sort worst-first, cap at eight, and record the dropped count |
+| PV-owned volume | the PVC is absent, so the volume summary lands on the PV row |
+| Parentage tie | `additionalItem` outranks `ownerReference`, and equal-strength claims keep the first |
 
 The right-hand panel shows the artifact as it evolves, while the sequence diagram shows the server-side calls that change it.
 
@@ -85,8 +93,8 @@ No backend or build output is required.
 
 ## Status
 
-Draft. The five scenarios above are implemented. Still to add:
+Draft. The thirteen scenarios above are implemented. Still to add:
 
-- volume failure where the disk is lost rather than rescued
-- multiple same-rank volume methods and the dropped-attempt count
 - a scenario selector deep link so a specific step can be shared
+- a “watch” mode that auto-advances without narration
+- an artifact-diff view between two steps

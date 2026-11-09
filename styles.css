@@ -672,6 +672,14 @@ select:hover {
   font-size: 8.5px;
 }
 
+.parent-source {
+  display: block;
+  margin-top: 1px;
+  color: var(--accent-2);
+  font-size: 8px;
+  opacity: 0.8;
+}
+
 .volume-ref {
   display: block;
   font-size: 9.5px;

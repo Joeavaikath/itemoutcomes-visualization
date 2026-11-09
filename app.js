@@ -97,6 +97,37 @@ function applyOperation(artifact, operation, state) {
       break;
     }
 
+    case "renameRow": {
+      const fromKey = keyOf(operation.from);
+      const to = clone(operation.to);
+      const toKey = keyOf(to);
+      const index = artifact.items.findIndex((item) => keyOf(item) === fromKey);
+      if (index < 0) break;
+
+      const [row] = artifact.items.splice(index, 1);
+      row.groupResource = to.groupResource;
+      row.namespace = to.namespace;
+      row.name = to.name;
+
+      for (const item of artifact.items) {
+        if (item.parent && keyOf(item.parent) === fromKey) {
+          item.parent = {
+            groupResource: to.groupResource,
+            namespace: to.namespace,
+            name: to.name,
+          };
+        }
+      }
+
+      const existingIndex = artifact.items.findIndex((item) => keyOf(item) === toKey);
+      if (existingIndex >= 0) {
+        artifact.items[existingIndex] = { ...artifact.items[existingIndex], ...row };
+      } else {
+        artifact.items.push(row);
+      }
+      break;
+    }
+
     case "volumeInfo":
       state.volumeInfo = clone(operation.value);
       break;
@@ -269,7 +300,10 @@ function outcomeChip(outcome) {
 function parentCell(row) {
   if (!row.parent) return "—";
   const parts = resourceParts(row.parent.groupResource);
-  return `<span class="parent-ref">${escapeHtml(row.parent.name)}</span><span class="parent-resource">${escapeHtml(parts.resource)}</span>`;
+  const source = row.parentSource
+    ? `<span class="parent-source">${escapeHtml(row.parentSource)}</span>`
+    : "";
+  return `<span class="parent-ref">${escapeHtml(row.parent.name)}</span><span class="parent-resource">${escapeHtml(parts.resource)}</span>${source}`;
 }
 
 function volumeCell(row) {
@@ -313,10 +347,11 @@ function renderTable(snapshot) {
         : "";
       let marker = "";
       if (row.skippedByVolume) {
-        marker =
-          row.outcome === "Succeeded"
-            ? `<span class="row-tag rescued" title="The row was rescued by a captured volume; SkippedByVolume remains true as provenance.">rescued</span>`
-            : `<span class="row-tag" title="The row's skip came from a volume path and is eligible for rescue.">volume-path skip</span>`;
+        if (row.outcome === "Succeeded") {
+          marker = `<span class="row-tag rescued" title="The row was rescued by a captured volume; SkippedByVolume remains true as provenance.">rescued</span>`;
+        } else if (row.outcome === "Skipped") {
+          marker = `<span class="row-tag" title="The row's skip came from a volume path and is eligible for rescue.">volume-path skip</span>`;
+        }
       }
 
       return `
