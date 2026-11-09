@@ -22,6 +22,10 @@
       </div>
 
       <div class="controls" aria-label="Playback controls">
+        <label class="scenario-picker">
+          <span>Scenario</span>
+          <select id="scenario"></select>
+        </label>
         <button id="play" class="button primary" type="button">Play</button>
         <button id="step" class="button" type="button">Step</button>
         <button id="reset" class="button ghost" type="button">Reset</button>
@@ -42,7 +46,7 @@
         <div class="panel-head">
           <div>
             <h2>Server sequence</h2>
-            <p class="panel-subtitle">Core backup path, no CLI</p>
+            <p id="scenario-description" class="panel-subtitle">Core backup path, no CLI</p>
           </div>
           <span id="phase-badge" class="badge phase">Prepare</span>
         </div>

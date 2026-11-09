@@ -2,14 +2,15 @@
 
 An animated, dependency-free visualization of Velero's per-item backup outcomes artifact.
 
-The page follows one KubeVirt backup through:
+The page includes five server-side scenarios:
 
-- item capture
-- parentage capture
-- volume-path skip and capture-time attempt
-- first artifact write with `finalized:false`
-- volume-info rescue
-- final artifact write with `finalized:true`
+| Scenario | What it shows |
+|---|---|
+| KubeVirt volume rescue | item capture, parentage, volume-path skip, capture-time attempt, CSI rescue |
+| Clean stateless item | one ConfigMap and the no-item-operations finalize path |
+| Prehook failure | a Pod row recorded before `Observe`, then raised to Failed |
+| Async BIA failure | an operation that settles after the first write and fails the item at finalize |
+| Finalize overlays | `Merge`, `ApplyOperations`, and `ApplyVolumes` over one stored artifact |
 
 The right-hand panel shows the artifact as it evolves, while the sequence diagram shows the server-side calls that change it.
 
@@ -84,9 +85,8 @@ No backend or build output is required.
 
 ## Status
 
-Draft. The current scenario is the KubeVirt volume rescue. Additional scenarios planned:
+Draft. The five scenarios above are implemented. Still to add:
 
-- clean stateless item
-- prehook failure
-- asynchronous BIA operation and the finalize branch
-- no-item-operations finalize
+- volume failure where the disk is lost rather than rescued
+- multiple same-rank volume methods and the dropped-attempt count
+- a scenario selector deep link so a specific step can be shared

@@ -1,13 +1,16 @@
-const PARTICIPANTS = window.PARTICIPANTS || [];
-const STORYBOARD = window.STORYBOARD || [];
+const SCENARIOS = window.SCENARIOS || [];
+let activeScenario = null;
+let PARTICIPANTS = [];
+let STORYBOARD = [];
 
-const PHASES = [
-  { id: "prepare", label: "Prepare" },
-  { id: "capture", label: "Capture" },
-  { id: "first-write", label: "First write" },
-  { id: "finalize", label: "Finalize" },
-  { id: "done", label: "Done" },
-];
+const PHASE_LABELS = {
+  prepare: "Prepare",
+  capture: "Capture",
+  "first-write": "First write",
+  operations: "Operations",
+  finalize: "Finalize",
+  done: "Done",
+};
 
 const ROW_HEIGHT = 66;
 const TOP_GAP = 34;
@@ -31,6 +34,8 @@ const playButton = $("#play");
 const stepButton = $("#step");
 const resetButton = $("#reset");
 const speedSelect = $("#speed");
+const scenarioSelect = $("#scenario");
+const scenarioDescription = $("#scenario-description");
 
 let currentStep = 0;
 let playing = false;
@@ -60,6 +65,12 @@ function emptyArtifact() {
 
 function applyOperation(artifact, operation, state) {
   switch (operation.type) {
+    case "snapshot": {
+      for (const key of Object.keys(artifact)) delete artifact[key];
+      Object.assign(artifact, clone(operation.value));
+      break;
+    }
+
     case "envelope":
       Object.assign(artifact, clone(operation.patch));
       break;
@@ -100,7 +111,8 @@ function buildSnapshots() {
   const state = { volumeInfo: null };
 
   return STORYBOARD.map((step) => {
-    if (step.operation) applyOperation(artifact, step.operation, state);
+    const operations = step.operations || (step.operation ? [step.operation] : []);
+    for (const operation of operations) applyOperation(artifact, operation, state);
     return {
       artifact: clone(artifact),
       volumeInfo: clone(state.volumeInfo),
@@ -148,6 +160,8 @@ function resourceParts(groupResource) {
 }
 
 function renderParticipants() {
+  participantsEl.style.setProperty("--participant-count", String(PARTICIPANTS.length));
+  stage.style.minWidth = `${Math.max(680, PARTICIPANTS.length * 96)}px`;
   participantsEl.innerHTML = PARTICIPANTS.map(
     (participant) => `
       <div class="participant" data-participant="${escapeHtml(participant.id)}">
@@ -203,15 +217,20 @@ function renderSequence() {
       const active = index === currentStep;
       const x1 = centers[item.from];
       const x2 = centers[item.to];
-      const labelX = (x1 + x2) / 2;
+      const labelX = Math.min(Math.max((x1 + x2) / 2, 110), Math.max(110, width - 110));
       const band = `<rect class="step-band${active ? " active" : ""}" x="0" y="${y - 24}" width="${width}" height="48" rx="8" />`;
       const marker = active ? "arrow-active" : "arrow-muted";
       const labelClass = `arrow-label${active ? " active" : ""}`;
       const dot = `<circle class="step-dot${active ? " active" : ""}" cx="${x1}" cy="${y}" r="4" />`;
 
       if (item.from === item.to) {
-        const loop = `<path class="arrow-line${active ? " active" : ""}" d="M ${x1} ${y - 12} h 34 a 10 10 0 0 1 10 10 v 4 a 10 10 0 0 1 -10 10 h -34" marker-end="url(#${marker})" />`;
-        return `${band}${loop}${svgLabelBackground(item.call, x1 + 22, y + 6)}<text class="${labelClass}" x="${x1 + 22}" y="${y + 2}" text-anchor="middle">${escapeHtml(item.call)}</text>${dot}`;
+        const labelWidth = Math.max(48, item.call.length * 5.9 + 14);
+        const rightFits = x1 + 22 + labelWidth / 2 <= width - 12;
+        const labelX = rightFits ? x1 + 22 : x1 - 22;
+        const loopPath = rightFits
+          ? `M ${x1} ${y - 12} h 34 a 10 10 0 0 1 10 10 v 4 a 10 10 0 0 1 -10 10 h -34`
+          : `M ${x1} ${y - 12} h -34 a 10 10 0 0 0 -10 10 v 4 a 10 10 0 0 0 10 10 h 34`;
+        return `${band}<path class="arrow-line${active ? " active" : ""}" d="${loopPath}" marker-end="url(#${marker})" />${svgLabelBackground(item.call, labelX, y - 6)}<text class="${labelClass}" x="${labelX}" y="${y - 17}" text-anchor="middle">${escapeHtml(item.call)}</text>${dot}`;
       }
 
       return `${band}<line class="arrow-line${active ? " active" : ""}" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" marker-end="url(#${marker})" />${svgLabelBackground(item.call, labelX, y)}<text class="${labelClass}" x="${labelX}" y="${y - 11}" text-anchor="middle">${escapeHtml(item.call)}</text>${dot}`;
@@ -342,11 +361,28 @@ function renderVolumeInfo(volumeInfo) {
     return;
   }
 
+  const volumes = Array.isArray(volumeInfo) ? volumeInfo : [volumeInfo];
+  const rows = volumes
+    .map((volume) => {
+      const attempts = Array.isArray(volume.attempts)
+        ? volume.attempts.length
+        : Number(volume.attempts || 0);
+      const result = volume.skipped
+        ? `skipped${volume.skippedReason ? ` · ${volume.skippedReason}` : ""}`
+        : volume.result;
+      return `
+        <div class="volume-item">
+          <div class="volume-line">pvc ${escapeHtml(volume.pvcNamespace)}/${escapeHtml(volume.pvcName)} · pv ${escapeHtml(volume.pvName)}</div>
+          <div class="volume-line"><strong>${escapeHtml(volume.method || "volume")}</strong> ${escapeHtml(result || "")}${attempts > 1 ? ` · ${attempts} attempts` : ""}</div>
+        </div>
+      `;
+    })
+    .join("");
+
   volumeInfoEl.classList.remove("hidden");
   volumeInfoEl.innerHTML = `
     <div class="volume-title"><span class="volume-dot"></span> Volume info</div>
-    <div class="volume-line">pvc ${escapeHtml(volumeInfo.pvcNamespace)}/${escapeHtml(volumeInfo.pvcName)} · pv ${escapeHtml(volumeInfo.pvName)}</div>
-    <div class="volume-line"><strong>${escapeHtml(volumeInfo.method)}</strong> ${escapeHtml(volumeInfo.result)}</div>
+    ${rows}
   `;
 }
 
@@ -366,15 +402,18 @@ function renderArtifact(snapshot) {
 
 function renderTimeline(snapshot) {
   const step = snapshot.step;
-  phaseBadge.textContent = PHASES.find((phase) => phase.id === step.phase)?.label || step.phase;
+  phaseBadge.textContent = PHASE_LABELS[step.phase] || step.phase;
   narrationEl.textContent = step.narration;
   stepCounter.textContent = `${currentStep + 1} / ${STORYBOARD.length}`;
 
-  const currentPhaseIndex = PHASES.findIndex((phase) => phase.id === step.phase);
-  phaseMarks.innerHTML = PHASES.map((phase, index) => {
-    const className = index === currentPhaseIndex ? "active" : index < currentPhaseIndex ? "past" : "";
-    return `<span class="phase-mark ${className}">${escapeHtml(phase.label)}</span>`;
-  }).join("");
+  const phases = [...new Set(STORYBOARD.map((item) => item.phase))];
+  const currentPhaseIndex = phases.indexOf(step.phase);
+  phaseMarks.innerHTML = phases
+    .map((phase, index) => {
+      const className = index === currentPhaseIndex ? "active" : index < currentPhaseIndex ? "past" : "";
+      return `<span class="phase-mark ${className}">${escapeHtml(PHASE_LABELS[phase] || phase)}</span>`;
+    })
+    .join("");
 
   scrubber.max = String(STORYBOARD.length - 1);
   scrubber.value = String(currentStep);
@@ -483,8 +522,28 @@ window.addEventListener("resize", () => {
   renderSequence();
 });
 
-snapshots = buildSnapshots();
-renderParticipants();
-currentStep = 0;
-setStep(0);
-requestAnimationFrame(() => renderSequence());
+function loadScenario(id) {
+  pause();
+  const scenario = SCENARIOS.find((item) => item.id === id) || SCENARIOS[0];
+  if (!scenario) return;
+
+  activeScenario = scenario;
+  PARTICIPANTS = scenario.participants;
+  STORYBOARD = scenario.steps;
+  snapshots = buildSnapshots();
+  currentStep = 0;
+  autoScroll = true;
+  sequenceScroll.scrollTop = 0;
+  scenarioSelect.value = scenario.id;
+  scenarioDescription.textContent = scenario.description;
+  document.title = `Item Outcomes — ${scenario.title}`;
+  renderParticipants();
+  render();
+  requestAnimationFrame(() => renderSequence());
+}
+
+scenarioSelect.innerHTML = SCENARIOS.map(
+  (scenario) => `<option value="${escapeHtml(scenario.id)}">${escapeHtml(scenario.title)}</option>`,
+).join("");
+scenarioSelect.addEventListener("change", (event) => loadScenario(event.target.value));
+if (SCENARIOS.length) loadScenario(SCENARIOS[0].id);

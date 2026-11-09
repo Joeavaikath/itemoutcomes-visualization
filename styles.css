@@ -150,18 +150,27 @@ select:hover {
   background: transparent;
 }
 
-.speed {
+.speed,
+.scenario-picker {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.speed {
   margin-left: 4px;
 }
 
-.speed select {
+.speed select,
+.scenario-picker select {
   padding: 7px 9px;
   color: var(--text);
+}
+
+.scenario-picker select {
+  max-width: 240px;
 }
 
 .layout {
@@ -301,7 +310,7 @@ select:hover {
 
 .sequence-stage {
   position: relative;
-  min-width: 740px;
+  min-width: 680px;
 }
 
 .participants {
@@ -309,7 +318,7 @@ select:hover {
   top: 0;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(6, minmax(104px, 1fr));
+  grid-template-columns: repeat(var(--participant-count, 6), minmax(84px, 1fr));
   gap: 8px;
   padding: 4px 0 10px;
   background: linear-gradient(180deg, rgba(13, 20, 33, 0.99), rgba(13, 20, 33, 0.92));
@@ -387,6 +396,7 @@ select:hover {
 }
 
 .arrow-line {
+  fill: none;
   stroke: #475569;
   stroke-width: 1.5;
   transition:
@@ -479,6 +489,12 @@ select:hover {
 
 .volume-line strong {
   color: var(--text);
+}
+
+.volume-item + .volume-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(52, 211, 153, 0.14);
 }
 
 .artifact-view {
