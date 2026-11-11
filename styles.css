@@ -659,25 +659,17 @@ select:hover {
   border-color: rgba(167, 139, 250, 0.22);
 }
 
-.parent-ref {
+.relation-name {
   display: block;
   font-family: "SFMono-Regular", ui-monospace, Menlo, monospace;
   font-size: 9.5px;
   color: #b8c8dc;
 }
 
-.parent-resource {
+.relation-resource {
   display: block;
   color: var(--faint);
   font-size: 8.5px;
-}
-
-.parent-source {
-  display: block;
-  margin-top: 1px;
-  color: var(--accent-2);
-  font-size: 8px;
-  opacity: 0.8;
 }
 
 .volume-ref {

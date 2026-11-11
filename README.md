@@ -6,19 +6,23 @@ The page includes thirteen server-side scenarios:
 
 | Scenario | What it shows |
 |---|---|
-| KubeVirt volume rescue | item capture, parentage, volume-path skip, capture-time attempt, CSI rescue |
+| KubeVirt volume rescue | item capture, ownership and reporting, volume-path skip, capture-time attempt, CSI rescue |
 | Clean stateless item | one ConfigMap and the no-item-operations finalize path |
 | Prehook failure | a Pod row recorded before `Observe`, then raised to Failed |
 | Async BIA failure | an operation that settles after the first write and fails the item at finalize |
 | Finalize overlays | `Merge`, `ApplyOperations`, and `ApplyVolumes` over one stored artifact |
 | Volume failure | a captured disk fails and the owning PVC row becomes Failed |
-| Pending operation | an operation is still pending at finalize, so the artifact stays provisional |
+| Pending operation | an unexpected pending operation at finalize leaves the artifact unfinalized |
 | Posthook failure | a Pod is backed up, then its posthook fails after the archive write |
 | Item skip after volume skip | an item-level skip clears the marker, so a captured disk cannot rescue it |
-| Rename and rekey | a parent is renamed and the child edge follows the final identity |
+| Rename and rekey | a reporting item is renamed and the provenance edge follows the final identity |
 | Multiple attempts and cap | ten attempts merge, sort worst-first, cap at eight, and record the dropped count |
 | PV-owned volume | the PVC is absent, so the volume summary lands on the PV row |
-| Parentage tie | `additionalItem` outranks `ownerReference`, and equal-strength claims keep the first |
+| Owner and reporter | a PVC keeps its controller owner while additional-item reporters are preserved |
+
+`owner` is the controller ownerReference; `reportedBy` is additional-item provenance, not parentage. A row can have both, and neither overrides the other.
+
+The hook scenarios show the intended per-item attribution. Current upstream hook handling has a known `on-error` gap (#10816); until fixed, hook failures may only appear in `Backup.status.hookStatus`.
 
 The right-hand panel shows the artifact as it evolves, while the sequence diagram shows the server-side calls that change it.
 

@@ -109,13 +109,19 @@ function applyOperation(artifact, operation, state) {
       row.namespace = to.namespace;
       row.name = to.name;
 
+      const toRef = {
+        groupResource: to.groupResource,
+        namespace: to.namespace,
+        name: to.name,
+      };
       for (const item of artifact.items) {
-        if (item.parent && keyOf(item.parent) === fromKey) {
-          item.parent = {
-            groupResource: to.groupResource,
-            namespace: to.namespace,
-            name: to.name,
-          };
+        if (item.owner && keyOf(item.owner) === fromKey) {
+          item.owner = toRef;
+        }
+        if (Array.isArray(item.reportedBy)) {
+          item.reportedBy = item.reportedBy.map((ref) =>
+            keyOf(ref) === fromKey ? toRef : ref
+          );
         }
       }
 
@@ -297,13 +303,20 @@ function outcomeChip(outcome) {
   return `<span class="chip ${value.toLowerCase()}">${escapeHtml(value)}</span>`;
 }
 
-function parentCell(row) {
-  if (!row.parent) return "—";
-  const parts = resourceParts(row.parent.groupResource);
-  const source = row.parentSource
-    ? `<span class="parent-source">${escapeHtml(row.parentSource)}</span>`
-    : "";
-  return `<span class="parent-ref">${escapeHtml(row.parent.name)}</span><span class="parent-resource">${escapeHtml(parts.resource)}</span>${source}`;
+function refCell(ref) {
+  if (!ref) return "—";
+  const parts = resourceParts(ref.groupResource);
+  return `<span class="relation-name">${escapeHtml(ref.name)}</span><span class="relation-resource">${escapeHtml(parts.resource)}</span>`;
+}
+
+function ownerCell(row) {
+  return refCell(row.owner);
+}
+
+function reportedByCell(row) {
+  const refs = row.reportedBy || [];
+  if (!refs.length) return "—";
+  return refs.map(refCell).join("");
 }
 
 function volumeCell(row) {
@@ -366,7 +379,8 @@ function renderTable(snapshot) {
             ${messageText}
           </td>
           <td>${outcomeChip(row.outcome)}${marker}</td>
-          <td>${parentCell(row)}</td>
+          <td>${ownerCell(row)}</td>
+          <td>${reportedByCell(row)}</td>
           <td>${volumeCell(row)}</td>
         </tr>
       `;
@@ -380,7 +394,8 @@ function renderTable(snapshot) {
           <th>Resource</th>
           <th>Object</th>
           <th>Outcome</th>
-          <th>Parent</th>
+          <th>Owner</th>
+          <th>Reported by</th>
           <th>Volume</th>
         </tr>
       </thead>

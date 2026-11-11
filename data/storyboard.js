@@ -48,9 +48,9 @@
   const renameDisk = { groupResource: "persistentvolumeclaims", namespace: "demo", name: "data-disk" };
   const capDisk = { groupResource: "persistentvolumeclaims", namespace: "demo", name: "data-disk" };
   const pvOwnedDisk = { groupResource: "persistentvolumes", namespace: "", name: "pv-data" };
-  const parentA = { groupResource: "pods", namespace: "demo", name: "parent-a" };
-  const parentB = { groupResource: "replicasets.apps", namespace: "demo", name: "parent-b" };
-  const parentTieDisk = { groupResource: "persistentvolumeclaims", namespace: "demo", name: "data-disk" };
+  const reporterPod = { groupResource: "pods", namespace: "demo", name: "reporter-pod" };
+  const ownerDataVolume = { groupResource: "datavolumes.cdi.kubevirt.io", namespace: "demo", name: "data-disk" };
+  const sharedDisk = { groupResource: "persistentvolumeclaims", namespace: "demo", name: "data-disk" };
   const posthookError = "post hook failed: hook command timed out";
 
   const prehookError = "pre hook failed: hook command exited 1";
@@ -95,16 +95,16 @@
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetParent(vmi1 → vm1)",
+          call: "SetOwner(vmi1) + SetReportedBy(vmi1)",
           narration:
-            "The VM names its VMI as an additional item. The edge mints a Named row for the child before the child is processed.",
+            "The VM owns the VMI and also names it as an additional item. The row is minted at Named with both facts; neither replaces the other.",
           operation: {
             type: "upsertRow",
             row: {
               ...vmi,
               outcome: "Named",
-              parent: ref(vm),
-              parentSource: "additionalItem",
+              owner: ref(vm),
+              reportedBy: [ref(vm)],
             },
           },
           highlight: key(vmi),
@@ -115,7 +115,7 @@
           to: "recorder",
           call: "Observe(vmi1)",
           narration:
-            "Processing the VMI promotes the Named row to Succeeded. The parent edge stays intact.",
+            "Processing the VMI promotes the Named row to Succeeded. The ownership and reporting facts stay intact.",
           operation: { type: "patchRow", key: key(vmi), patch: { outcome: "Succeeded" } },
           highlight: key(vmi),
         },
@@ -131,8 +131,7 @@
             row: {
               ...virtPod,
               outcome: "Named",
-              parent: ref(vmi),
-              parentSource: "ownerReference",
+              owner: ref(vmi),
             },
           },
           highlight: key(virtPod),
@@ -143,7 +142,7 @@
           to: "recorder",
           call: "Observe(pod)",
           narration:
-            "Processing the Pod promotes its Named row to Succeeded. The pod is now the reporting parent for its disks.",
+            "Processing the Pod promotes its Named row to Succeeded. The pod is now the reporting item for its disks.",
           operation: { type: "patchRow", key: key(virtPod), patch: { outcome: "Succeeded" } },
           highlight: key(virtPod),
         },
@@ -151,16 +150,15 @@
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetParent(disk1 → pod)",
+          call: "SetReportedBy(disk1 → pod)",
           narration:
-            "The Pod names its PVC as an additional item. The additionalItem edge mints a Named row for the disk.",
+            "The Pod names its PVC as an additional item. The row is minted at Named with the Pod as provenance; the PVC has no controller owner in this scenario.",
           operation: {
             type: "upsertRow",
             row: {
               ...virtPvc,
               outcome: "Named",
-              parent: ref(virtPod),
-              parentSource: "additionalItem",
+              reportedBy: [ref(virtPod)],
             },
           },
           highlight: key(virtPvc),
@@ -440,8 +438,7 @@
             row: {
               ...prehookPod,
               outcome: "Named",
-              parent: ref(replicaset),
-              parentSource: "ownerReference",
+              owner: ref(replicaset),
             },
           },
           highlight: key(prehookPod),
@@ -515,7 +512,7 @@
           to: "store",
           call: "PutBackupItemOutcomes(final)",
           narration:
-            "The final artifact is written. The Pod row remains Failed with its parent edge and prehook message.",
+            "The final artifact is written. The Pod row remains Failed with its owner edge and prehook message.",
           operation: { type: "envelope", patch: { finalized: true } },
         },
         {
@@ -819,7 +816,7 @@
           to: "finalizer",
           call: "operation overlay",
           narration:
-            "ApplyOperations owns finalized. It never changes Parent. A pending operation would leave finalized false.",
+            "ApplyOperations owns finalized. It never changes owner or reportedBy. A pending operation would leave finalized false.",
         },
         {
           phase: "finalize",
@@ -1068,7 +1065,7 @@
     {
       id: "pending-operation",
       title: "Pending operation",
-      description: "An operation is still pending at finalize, so the artifact stays provisional.",
+      description: "An unexpected pending operation at finalize leaves the artifact unfinalized.",
       participants: [
         p.controller,
         p.recorder,
@@ -1147,7 +1144,7 @@
           to: "finalizer",
           call: "reconcile Finalizing backup with pending operation",
           narration:
-            "This is a warning path: finalize should not see a pending operation. The overlay still has to handle it.",
+            "This is an extreme corner case: finalize normally runs only after operations are terminal. The overlay still has to handle it.",
         },
         {
           phase: "finalize",
@@ -1175,9 +1172,9 @@
           phase: "finalize",
           from: "outcomes",
           to: "store",
-          call: "PutBackupItemOutcomes(provisional)",
+          call: "PutBackupItemOutcomes(unfinalized)",
           narration:
-            "The artifact is written, but it remains provisional. The pending operation is reported as a warning.",
+            "The artifact is written with finalized:false. The pending operation is surfaced; this is not a normal timeout path.",
         },
       ],
     },
@@ -1479,7 +1476,7 @@
     {
       id: "rekey",
       title: "Rename and rekey",
-      description: "A parent is renamed, and the child edge follows the final identity.",
+      description: "A reporting item is renamed, and the child provenance edge follows the final identity.",
       participants: [
         p.controller,
         p.recorder,
@@ -1511,7 +1508,7 @@
           from: "backupper",
           to: "recorder",
           call: "Observe(demo-pod)",
-          narration: "The parent Pod is captured at its original identity.",
+          narration: "The reporting Pod is captured at its original identity.",
           operation: { type: "upsertRow", row: { ...renamePod, outcome: "Succeeded" } },
           highlight: key(renamePod),
         },
@@ -1519,15 +1516,14 @@
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetParent(data-disk → demo-pod)",
+          call: "SetReportedBy(data-disk → demo-pod)",
           narration: "The Pod names its PVC as an additional item.",
           operation: {
             type: "upsertRow",
             row: {
               ...renameDisk,
               outcome: "Named",
-              parent: ref(renamePod),
-              parentSource: "additionalItem",
+              reportedBy: [ref(renamePod)],
             },
           },
           highlight: key(renameDisk),
@@ -1547,7 +1543,7 @@
           to: "recorder",
           call: "Rekey(demo-pod → demo-pod-generated)",
           narration:
-            "The BIA renames the Pod. The row moves to the final identity, and the PVC parent edge is retargeted through the alias.",
+            "The BIA renames the Pod. The row moves to the final identity, and the PVC reportedBy edge is retargeted through the alias.",
           operation: { type: "renameRow", from: renamePod, to: renamedPod },
           highlight: key(renamedPod),
         },
@@ -1930,9 +1926,10 @@
       ],
     },
     {
-      id: "parentage-tie",
-      title: "Parentage tie",
-      description: "Additional-item outranks ownerReference, and equal-strength claims keep the first.",
+      id: "owner-and-reporter",
+      title: "Owner and reporter",
+      description:
+        "A PVC keeps its controller owner while additional-item reporters are preserved independently.",
       participants: [
         p.controller,
         p.recorder,
@@ -1954,7 +1951,7 @@
             patch: {
               schemaVersion: "v1",
               kind: "backup",
-              backupName: "demo-parentage-tie",
+              backupName: "demo-owner-reporter",
               finalized: false,
             },
           },
@@ -1963,62 +1960,64 @@
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "Observe(parent-a)",
-          narration: "The first parent is captured.",
-          operation: { type: "upsertRow", row: { ...parentA, outcome: "Succeeded" } },
-          highlight: key(parentA),
+          call: "Observe(reporter-pod)",
+          narration: "The reporting Pod is captured.",
+          operation: { type: "upsertRow", row: { ...reporterPod, outcome: "Succeeded" } },
+          highlight: key(reporterPod),
         },
         {
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "Observe(parent-b)",
-          narration: "The second parent is captured.",
-          operation: { type: "upsertRow", row: { ...parentB, outcome: "Succeeded" } },
-          highlight: key(parentB),
+          call: "Observe(data-disk owner)",
+          narration: "The owning DataVolume is captured.",
+          operation: { type: "upsertRow", row: { ...ownerDataVolume, outcome: "Succeeded" } },
+          highlight: key(ownerDataVolume),
         },
         {
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetOwnerParent(disk → parent-b)",
+          call: "SetOwner(disk → data-disk)",
           narration:
-            "The PVC gets an ownerReference edge to parent-b. The child row is minted at Named.",
+            "The PVC has a controller ownerReference. The child row is minted at Named.",
           operation: {
             type: "upsertRow",
             row: {
-              ...parentTieDisk,
+              ...sharedDisk,
               outcome: "Named",
-              parent: ref(parentB),
-              parentSource: "ownerReference",
+              owner: ref(ownerDataVolume),
             },
           },
-          highlight: key(parentTieDisk),
+          highlight: key(sharedDisk),
         },
         {
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetParent(disk → parent-a)",
+          call: "SetReportedBy(disk → reporter-pod)",
           narration:
-            "An additional-item edge to parent-a outranks the ownerReference edge. The parent changes to parent-a.",
+            "The Pod names the PVC as an additional item. reportedBy records provenance; the owner is unchanged.",
           operation: {
             type: "patchRow",
-            key: key(parentTieDisk),
-            patch: {
-              parent: ref(parentA),
-              parentSource: "additionalItem",
-            },
+            key: key(sharedDisk),
+            patch: { reportedBy: [ref(reporterPod)] },
           },
-          highlight: key(parentTieDisk),
+          highlight: key(sharedDisk),
         },
         {
           phase: "capture",
           from: "backupper",
           to: "recorder",
-          call: "SetParent(disk → parent-b)",
+          call: "SetReportedBy(disk → data-disk)",
           narration:
-            "A second additional-item claim has equal strength. The first claim wins, so the parent stays parent-a.",
+            "The owner is also a reporter. Both facts are preserved; there is no precedence between owner and reportedBy.",
+          operation: {
+            type: "patchRow",
+            key: key(sharedDisk),
+            patch: { reportedBy: [ref(reporterPod), ref(ownerDataVolume)] },
+          },
+          highlight: key(sharedDisk),
         },
         {
           phase: "capture",
@@ -2028,17 +2027,17 @@
           narration: "The PVC is promoted to Succeeded.",
           operation: {
             type: "patchRow",
-            key: key(parentTieDisk),
+            key: key(sharedDisk),
             patch: { outcome: "Succeeded" },
           },
-          highlight: key(parentTieDisk),
+          highlight: key(sharedDisk),
         },
         {
           phase: "first-write",
           from: "controller",
           to: "store",
           call: "PutBackup(first artifact)",
-          narration: "The first artifact records the winning parent edge.",
+          narration: "The first artifact records both the owner and every reporter.",
           operation: { type: "envelope", patch: { finalized: false } },
         },
         {
